@@ -1,0 +1,107 @@
+import os
+
+import math
+import keras
+import numpy as np
+import tensorflow as tf
+from keras import layers
+from keras.layers import Input, Add, Dense, Activation,Reshape,Dropout, ZeroPadding2D, BatchNormalization, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D, Dot, Conv2DTranspose,Cropping2D
+from keras.models import Model, load_model
+from keras.preprocessing import image
+from keras.utils import layer_utils
+from keras.utils.data_utils import get_file
+from keras.applications.imagenet_utils import preprocess_input
+import pydot
+from IPython.display import SVG
+from keras.utils.vis_utils import model_to_dot
+from keras.utils import plot_model
+from keras.initializers import glorot_uniform
+import scipy.misc
+from matplotlib.pyplot import imshow
+from keras.layers.advanced_activations import LeakyReLU, PReLU
+from keras.regularizers import l2
+from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img  
+import cv2
+from keras.applications.vgg16 import VGG16
+%matplotlib inline
+
+import keras.backend as K
+K.set_learning_phase(1)
+
+def FCN_VGG16_8S(input_shape):
+    X_input = Input(shape=input_shape)
+    X = Conv2D(64, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=0))(X_input)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(64, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=1))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid')(X)
+
+
+    X = Conv2D(128, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=2))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(128, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=3))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid')(X)
+
+    X = Conv2D(256, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=4))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(256, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=5))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(256, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=6))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid')(X)
+    pool3 = X
+
+    X = Conv2D(512, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=7))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(512, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=8))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(512, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=9))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid')(X)
+    pool4 = X
+
+    X = Conv2D(512, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=10))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(512, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=11))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = Conv2D(512, kernel_size=(3,3), strides=(1,1), padding='same', kernel_initializer = glorot_uniform(seed=12))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid')(X)
+
+    X = Conv2D(4096, (7, 7), activation='relu', padding='same')(X)
+    X = Dropout(0.5)(X)
+    X = Conv2D(4096, (1, 1), activation='relu', padding='same')(X)
+    X = Dropout(0.5)(X)
+    X = Conv2D(2, kernel_size=(1,1), padding='valid')(X)
+    pool4 = Conv2D(2, kernel_size=(1,1), padding='valid')(pool4)
+    pool3 = Conv2D(2, kernel_size=(1,1), padding='valid')(pool3)
+    X = Conv2DTranspose(2, kernel_size=(4,4),strides=(2,2))(X)
+    X = Cropping2D(cropping=1)(X)
+    X = Add()([X,pool4])
+    X = Conv2DTranspose(2, kernel_size=(4,4),strides=(2,2))(X)
+    X = Cropping2D(cropping=1)(X)
+    X = Add()([X,pool3])
+    X = Conv2DTranspose(1, kernel_size=(16,16),strides=(8,8))(X)
+    X = Cropping2D(cropping=4)(X)
+    model = Model(inputs = X_input, outputs = X)
+    
+    return model
+   
+ model = FCN_VGG16_8S(input_shape=(2400, 1984, 1))
+ model.summary()
+ model.compile(optimizer=keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0), loss = 'mean_squared_error', metrics=['accuracy'])
+ model.fit(x_train, y_train,epochs = 50, batch_size = 2,validation_data=(x_test,y_test), shuffle = True)
